@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
+	"log"
 	"time"
 
 	_ "github.com/shadowbane/go-logger"
@@ -12,6 +12,7 @@ import (
 
 type RedisCache struct {
 	Connection *redis.Client
+	Config     *RedisConfig
 }
 
 // Connect to Redis Server
@@ -35,13 +36,12 @@ func Init(c *RedisConfig) *RedisCache {
 
 	ping := redisClient.Ping(context.TODO())
 	if ping.Err() != nil {
-		zap.S().Errorf("Error connecting to Redis Server: %s", ping.Err())
+		log.Fatalf("Error connecting to Redis Server: %s", ping.Err())
 	}
-
-	zap.S().Debug("Connected to Redis Server")
 
 	return &RedisCache{
 		Connection: redisClient,
+		Config:     c,
 	}
 }
 
@@ -49,9 +49,12 @@ func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 
 	exp := time.Duration(expiration) * time.Second
 
-	valueToStore := toJson(value)
+	valueToStore, err := ToJson(value)
+	if err != nil {
+		return err
+	}
 
-	set := rc.Connection.Set(context.Background(), key, valueToStore, exp)
+	set := rc.Connection.Set(context.Background(), getKeyWithPrefix(rc.Config, key), valueToStore, exp)
 	if set.Err() != nil {
 		return set.Err()
 	}
@@ -60,7 +63,7 @@ func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 }
 
 func (rc *RedisCache) Get(key string) (interface{}, error) {
-	operation := rc.Connection.Get(context.Background(), key)
+	operation := rc.Connection.Get(context.Background(), getKeyWithPrefix(rc.Config, key))
 
 	if operation.Err() != nil {
 		return nil, operation.Err()
@@ -72,7 +75,8 @@ func (rc *RedisCache) Get(key string) (interface{}, error) {
 	}
 
 	if IsJson(result) {
-		return toInterface(result), nil
+		iface, _ := ToInterface(result)
+		return iface, nil
 	}
 
 	return result, nil
@@ -80,7 +84,7 @@ func (rc *RedisCache) Get(key string) (interface{}, error) {
 
 // Has checks if the key exists in the cache
 func (rc *RedisCache) Has(key string) bool {
-	operation := rc.Connection.Exists(context.Background(), key)
+	operation := rc.Connection.Exists(context.Background(), getKeyWithPrefix(rc.Config, key))
 
 	if operation.Err() != nil {
 		return false
@@ -99,23 +103,29 @@ func IsJson(str string) bool {
 	return json.Unmarshal([]byte(str), &js) == nil
 }
 
-func toJson(value interface{}) string {
+func ToJson(value interface{}) (string, error) {
 	jsonString, err := json.Marshal(value)
 
 	if err != nil {
-		zap.S().Errorf("Error converting interface to string: %s", err.Error())
+		return "", err
 	}
 
-	return string(jsonString)
+	return string(jsonString), nil
 }
 
-func toInterface(value string) interface{} {
+func ToInterface(value string) (interface{}, error) {
 	var result interface{}
 	err := json.Unmarshal([]byte(value), &result)
 
 	if err != nil {
-		zap.S().Errorf("Error converting string to interface: %s", err.Error())
+		return nil, err
 	}
 
-	return result
+	return result, nil
+}
+
+func getKeyWithPrefix(c *RedisConfig, value string) string {
+	key := c.Prefix + ":" + value
+
+	return key
 }

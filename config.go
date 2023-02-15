@@ -11,6 +11,7 @@ type RedisConfig struct {
 	Port     string
 	Password string
 	DB       int
+	Prefix   string
 }
 
 func LoadEnvForRedis() *RedisConfig {
@@ -25,6 +26,7 @@ func LoadEnvForRedis() *RedisConfig {
 	flag.StringVar(&rc.Port, "Redis Port", Port, "Redis Port")
 	flag.StringVar(&rc.Password, "Redis Password", Password, "Redis Password")
 	flag.IntVar(&rc.DB, "Redis DB", Database, "Redis DB")
+	flag.StringVar(&rc.Prefix, "Redis Cache Prefix", getenv("REDIS_PREFIX", "app-data"), "Redis Cache Prefix")
 
 	return rc
 }
