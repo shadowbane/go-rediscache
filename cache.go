@@ -21,6 +21,8 @@ type RedisCache struct {
 //   - host: Redis Server Host
 //   - password: Redis Server Password
 //   - database: Redis Server Database int
+//  Returns:
+//   - *redis.Client
 func connect(host string, password string, database int) *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:     host,
@@ -31,6 +33,16 @@ func connect(host string, password string, database int) *redis.Client {
 	return client
 }
 
+// Init Redis Cache
+//
+// This will be the main entry point for Redis Cache
+// It will connect to Redis Server and return RedisCache instance,
+// which can be used to store and retrieve data from Redis Server
+//
+// Parameters:
+//  - c: RedisConfig
+// Returns:
+//  - RedisCache
 func Init(c *RedisConfig) *RedisCache {
 	redisClient := connect(c.GetConnection(), c.Password, c.DB)
 
@@ -45,6 +57,14 @@ func Init(c *RedisConfig) *RedisCache {
 	}
 }
 
+// Set store value to cache
+// You can set expiration time in seconds, which will automatically
+// delete the key after the time has passed
+//
+// Parameters:
+//  - key: string
+//  - value: interface{}
+//  - expiration: int (second)
 func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 
 	exp := time.Duration(expiration) * time.Second
@@ -62,6 +82,7 @@ func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 	return nil
 }
 
+// Get stored value from cache
 func (rc *RedisCache) Get(key string) (interface{}, error) {
 	operation := rc.Connection.Get(context.Background(), getKeyWithPrefix(rc.Config, key))
 
@@ -80,6 +101,29 @@ func (rc *RedisCache) Get(key string) (interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// Forget stored value from cache
+func (rc *RedisCache) Forget(key string) error {
+	operation := rc.Connection.Del(context.Background(), getKeyWithPrefix(rc.Config, key))
+
+	if operation.Err() != nil {
+		return operation.Err()
+	}
+
+	return nil
+}
+
+// Flush the cache in current database
+// Warning: This will flush all records in current redis database
+func (rc *RedisCache) Flush() error {
+	operation := rc.Connection.FlushDB(context.Background())
+
+	if operation.Err() != nil {
+		return operation.Err()
+	}
+
+	return nil
 }
 
 // Has checks if the key exists in the cache

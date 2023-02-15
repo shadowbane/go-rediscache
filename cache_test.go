@@ -2,11 +2,13 @@ package rediscache
 
 import (
 	"context"
+	"fmt"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"reflect"
@@ -453,6 +455,94 @@ func Test_getenv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getenv(tt.args.key, tt.args.fallback); got != tt.want {
 				t.Errorf("getenv() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisCache_Forget(t *testing.T) {
+	Setup(t)
+	defer teardown()
+
+	rCache := initRedis()
+
+	type args struct {
+		key string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		beforeRun func()
+		wantErr   assert.ErrorAssertionFunc
+	}{
+		{
+			"Can delete if key exist",
+			args{"key"},
+			func() {
+				rCache.Connection.Set(context.Background(), "key", "value", 0)
+			},
+			assert.NoError,
+		},
+		{
+			"No error thrown if key not exist",
+			args{"key"},
+			func() {
+				redisServer.FlushAll()
+			},
+			assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.beforeRun()
+			tt.wantErr(t, rCache.Forget(tt.args.key), fmt.Sprintf("Forget(%v)", tt.args.key))
+		})
+	}
+}
+
+func TestRedisCache_Flush(t *testing.T) {
+	Setup(t)
+	defer teardown()
+
+	rCache := initRedis()
+
+	tests := []struct {
+		name      string
+		beforeRun func(keys ...string)
+		keys      []string
+		wantErr   assert.ErrorAssertionFunc
+	}{
+		{
+			"Can flush all keys",
+			func(keys ...string) {
+				for _, key := range keys {
+					// generate random value
+					val := strconv.Itoa(rand.Intn(1000))
+
+					// set cache with random value
+					rCache.Connection.Set(context.Background(), key, val, 0)
+				}
+			},
+			[]string{"key1", "key2"},
+			assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.beforeRun(tt.keys...)
+			//tt.wantErr(t, rCache.Flush(), fmt.Sprintf("Flush()"))
+			for _, key := range tt.keys {
+				// check if key exist
+				val, _ := rCache.Connection.Exists(context.Background(), key).Result()
+				assert.True(t, val > 0, fmt.Sprintf("Key %v should exist", key))
+			}
+
+			_ = rCache.Flush()
+
+			for _, key := range tt.keys {
+				// check if key exist
+				val, _ := rCache.Connection.Exists(context.Background(), key).Result()
+				assert.False(t, val > 0, fmt.Sprintf("Key %v should not exist", key))
 			}
 		})
 	}
