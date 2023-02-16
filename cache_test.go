@@ -19,7 +19,7 @@ import (
 
 var redisServer *miniredis.Miniredis
 
-func Setup(t *testing.T) {
+func setup(t *testing.T) {
 	redisServer = miniredis.RunT(t)
 }
 
@@ -54,7 +54,7 @@ func testOsExit(t *testing.T, funcName string, testFunc func(*testing.T)) {
 }
 
 func TestInit(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 
 	cfg := &RedisConfig{
@@ -83,6 +83,10 @@ func TestInit(t *testing.T) {
 }
 
 func TestIsJson(t *testing.T) {
+	setup(t)
+	defer teardown()
+	rCache := initRedis()
+
 	type args struct {
 		str string
 	}
@@ -96,7 +100,7 @@ func TestIsJson(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsJson(tt.args.str); got != tt.want {
+			if got := rCache.IsJson(tt.args.str); got != tt.want {
 				t.Errorf("IsJson() = %v, want %v", got, tt.want)
 			}
 		})
@@ -126,7 +130,7 @@ func TestLoadEnvForRedis(t *testing.T) {
 }
 
 func TestRedisCache_Get(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 	rCache := initRedis()
 
@@ -148,7 +152,7 @@ func TestRedisCache_Get(t *testing.T) {
 			func() {
 				rCache.Connection.Set(
 					context.Background(),
-					getKeyWithPrefix(rCache.Config, "test"),
+					rCache.getKeyWithPrefix(rCache.Config, "test"),
 					"this is test value",
 					time.Duration(5)*time.Second,
 				)
@@ -183,13 +187,13 @@ func TestRedisCache_Get(t *testing.T) {
 }
 
 func TestRedisCache_Has(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 
 	rCache := initRedis()
 	rCache.Connection.Set(
 		context.Background(),
-		getKeyWithPrefix(rCache.Config, "test"),
+		rCache.getKeyWithPrefix(rCache.Config, "test"),
 		"test",
 		time.Duration(5)*time.Second,
 	)
@@ -215,7 +219,7 @@ func TestRedisCache_Has(t *testing.T) {
 }
 
 func TestRedisCache_Set(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 
 	rCache := initRedis()
@@ -262,7 +266,7 @@ func TestRedisCache_Set(t *testing.T) {
 	t.Run(tests[0].name, func(t *testing.T) {
 		_ = rCache.Set(tests[0].args.key, tests[0].args.value, tests[0].args.expiration)
 
-		assertion, err := rCache.Connection.Exists(context.Background(), getKeyWithPrefix(rCache.Config, tests[0].args.key)).Result()
+		assertion, err := rCache.Connection.Exists(context.Background(), rCache.getKeyWithPrefix(rCache.Config, tests[0].args.key)).Result()
 		t.Logf("assertion: %v", assertion)
 		if err != nil {
 			t.Errorf("Set() error = %v, want %v", err, tests[0].want)
@@ -281,7 +285,7 @@ func TestRedisCache_Set(t *testing.T) {
 
 	t.Run(tests[2].name, func(t *testing.T) {
 		_ = rCache.Set(tests[2].args.key, tests[2].args.value, tests[2].args.expiration)
-		assertion, err := rCache.Connection.Exists(context.Background(), getKeyWithPrefix(rCache.Config, tests[2].args.key)).Result()
+		assertion, err := rCache.Connection.Exists(context.Background(), rCache.getKeyWithPrefix(rCache.Config, tests[2].args.key)).Result()
 
 		if err != nil {
 			t.Errorf("Set() error = %v, want %v", err, tests[2].want)
@@ -292,7 +296,7 @@ func TestRedisCache_Set(t *testing.T) {
 		// wait for cache expired
 		redisServer.FastForward(2 * time.Second)
 
-		assertion, err = rCache.Connection.Exists(context.Background(), getKeyWithPrefix(rCache.Config, tests[2].args.key)).Result()
+		assertion, err = rCache.Connection.Exists(context.Background(), rCache.getKeyWithPrefix(rCache.Config, tests[2].args.key)).Result()
 		assert.Equal(t, tests[2].want, assertion > 0, "Set() error. Cache '%s' with value '%v' is exist", tests[2].args.key, tests[2].args.value)
 	})
 }
@@ -329,6 +333,10 @@ func TestRedisConfig_GetConnection(t *testing.T) {
 }
 
 func TestToInterface(t *testing.T) {
+	setup(t)
+	defer teardown()
+	rCache := initRedis()
+
 	type args struct {
 		value string
 	}
@@ -336,8 +344,8 @@ func TestToInterface(t *testing.T) {
 	// convert 1 to float
 	flt, _ := strconv.ParseFloat("1", 64)
 
-	jsonStrTest, _ := ToJson("John Doe")
-	jsonIntTest, _ := ToJson(flt)
+	jsonStrTest, _ := rCache.ToJson("John Doe")
+	jsonIntTest, _ := rCache.ToJson(flt)
 
 	tests := []struct {
 		name string
@@ -353,7 +361,7 @@ func TestToInterface(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := ToInterface(tt.args.value); !assert.Equal(t, tt.want, got) {
+			if got, _ := rCache.ToInterface(tt.args.value); !assert.Equal(t, tt.want, got) {
 				t.Errorf("ToInterface() = %v, want %v", got, tt.want)
 			}
 		})
@@ -361,6 +369,10 @@ func TestToInterface(t *testing.T) {
 }
 
 func TestToJson(t *testing.T) {
+	setup(t)
+	defer teardown()
+	rCache := initRedis()
+
 	type args struct {
 		value interface{}
 	}
@@ -374,7 +386,7 @@ func TestToJson(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := ToJson(tt.args.value); got != tt.want {
+			if got, _ := rCache.ToJson(tt.args.value); got != tt.want {
 				t.Errorf("ToJson() = %v, want %v", got, tt.want)
 			}
 		})
@@ -412,6 +424,11 @@ func Test_connect(t *testing.T) {
 }
 
 func Test_getKeyWithPrefix(t *testing.T) {
+	setup(t)
+	defer teardown()
+
+	rCache := initRedis()
+
 	type args struct {
 		c     *RedisConfig
 		value string
@@ -425,7 +442,7 @@ func Test_getKeyWithPrefix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getKeyWithPrefix(tt.args.c, tt.args.value); got != tt.want {
+			if got := rCache.getKeyWithPrefix(tt.args.c, tt.args.value); got != tt.want {
 				t.Errorf("getKeyWithPrefix() = %v, want %v", got, tt.want)
 			}
 		})
@@ -461,7 +478,7 @@ func Test_getenv(t *testing.T) {
 }
 
 func TestRedisCache_Forget(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 
 	rCache := initRedis()
@@ -501,7 +518,7 @@ func TestRedisCache_Forget(t *testing.T) {
 }
 
 func TestRedisCache_Flush(t *testing.T) {
-	Setup(t)
+	setup(t)
 	defer teardown()
 
 	rCache := initRedis()

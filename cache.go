@@ -69,12 +69,12 @@ func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 
 	exp := time.Duration(expiration) * time.Second
 
-	valueToStore, err := ToJson(value)
+	valueToStore, err := rc.ToJson(value)
 	if err != nil {
 		return err
 	}
 
-	set := rc.Connection.Set(context.Background(), getKeyWithPrefix(rc.Config, key), valueToStore, exp)
+	set := rc.Connection.Set(context.Background(), rc.getKeyWithPrefix(rc.Config, key), valueToStore, exp)
 	if set.Err() != nil {
 		return set.Err()
 	}
@@ -84,7 +84,7 @@ func (rc *RedisCache) Set(key string, value interface{}, expiration int) error {
 
 // Get stored value from cache
 func (rc *RedisCache) Get(key string) (interface{}, error) {
-	operation := rc.Connection.Get(context.Background(), getKeyWithPrefix(rc.Config, key))
+	operation := rc.Connection.Get(context.Background(), rc.getKeyWithPrefix(rc.Config, key))
 
 	if operation.Err() != nil {
 		return nil, operation.Err()
@@ -95,8 +95,8 @@ func (rc *RedisCache) Get(key string) (interface{}, error) {
 		return nil, err
 	}
 
-	if IsJson(result) {
-		iface, _ := ToInterface(result)
+	if rc.IsJson(result) {
+		iface, _ := rc.ToInterface(result)
 		return iface, nil
 	}
 
@@ -105,7 +105,7 @@ func (rc *RedisCache) Get(key string) (interface{}, error) {
 
 // Forget stored value from cache
 func (rc *RedisCache) Forget(key string) error {
-	operation := rc.Connection.Del(context.Background(), getKeyWithPrefix(rc.Config, key))
+	operation := rc.Connection.Del(context.Background(), rc.getKeyWithPrefix(rc.Config, key))
 
 	if operation.Err() != nil {
 		return operation.Err()
@@ -128,7 +128,7 @@ func (rc *RedisCache) Flush() error {
 
 // Has checks if the key exists in the cache
 func (rc *RedisCache) Has(key string) bool {
-	operation := rc.Connection.Exists(context.Background(), getKeyWithPrefix(rc.Config, key))
+	operation := rc.Connection.Exists(context.Background(), rc.getKeyWithPrefix(rc.Config, key))
 
 	if operation.Err() != nil {
 		return false
@@ -142,12 +142,12 @@ func (rc *RedisCache) Has(key string) bool {
 	return result > 0
 }
 
-func IsJson(str string) bool {
+func (rc *RedisCache) IsJson(str string) bool {
 	var js json.RawMessage
 	return json.Unmarshal([]byte(str), &js) == nil
 }
 
-func ToJson(value interface{}) (string, error) {
+func (rc *RedisCache) ToJson(value interface{}) (string, error) {
 	jsonString, err := json.Marshal(value)
 
 	if err != nil {
@@ -157,7 +157,7 @@ func ToJson(value interface{}) (string, error) {
 	return string(jsonString), nil
 }
 
-func ToInterface(value string) (interface{}, error) {
+func (rc *RedisCache) ToInterface(value string) (interface{}, error) {
 	var result interface{}
 	err := json.Unmarshal([]byte(value), &result)
 
@@ -168,7 +168,7 @@ func ToInterface(value string) (interface{}, error) {
 	return result, nil
 }
 
-func getKeyWithPrefix(c *RedisConfig, value string) string {
+func (rc *RedisCache) getKeyWithPrefix(c *RedisConfig, value string) string {
 	key := c.Prefix + ":" + value
 
 	return key
